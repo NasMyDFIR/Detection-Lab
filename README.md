@@ -365,3 +365,147 @@ Password: <password>
 ```
 
 If login succeeds → Active Directory is functioning properly.
+
+
+# Part 3 – Configuring Microsoft Recommended Audit Policies & Sysmon
+
+This section walks through configuring Microsoft’s baseline audit recommendations using **Group Policy Objects (GPOs)**, enabling **process command-line logging**, and installing **Sysmon** for enhanced endpoint telemetry.
+
+## 1. Overview of Microsoft Audit Baselines
+
+Microsoft provides recommended audit settings because Windows defaults are insufficient for detection and investigation.  
+Key categories include:
+
+- **Account Logon / Account Management**
+- **Detailed Tracking**
+- **Logon/Logoff**
+- **Policy Change**
+- **System Events**
+
+Reference: Microsoft Baseline Security Audit Recommendations (https://learn.microsoft.com/en-us/windows-server/identity/ad-ds/plan/security-best-practices/audit-policy-recommendations).
+
+## 2. Create and Link a New GPO
+
+1. On the domain controller (`ADDC01`), open **Group Policy Management**.
+2. Expand:
+```
+Forest → Domains → <your-domain>
+```
+3. Right-click the domain → **Create a GPO in this domain, and Link it here**.
+4. Name it:
+```
+Audit Policy – Endpoint
+```
+5. Right-click the GPO → **Edit**.
+
+## 3. Configure Advanced Audit Policies
+
+Navigate to:
+
+```
+Computer Configuration
+→ Policies
+→ Windows Settings
+→ Security Settings
+→ Advanced Audit Policy Configuration
+→ Audit Policies
+```
+
+### Enable the following according to Microsoft baselines:
+
+### **Account Logon**
+- Audit Credential Validation → Success
+
+### **Account Management**
+- Audit Computer Account Management → Success  
+- Audit Other Account Management → Success  
+- Audit Security Group Management → Success  
+- Audit User Account Management → Success
+
+### **Detailed Tracking**
+- Audit Process Creation → Success
+
+### **Logon/Logoff**
+- Audit Logoff → Success  
+- Audit Logon → Success & Failure  
+- Audit Special Logon → Success
+
+### **Policy Change**
+- Audit Policy Change → Success & Failure  
+- Audit Authentication Policy Change → Success
+
+### **System**
+- IPsec Driver → Success & Failure  
+- Security State Change → Success & Failure  
+- Security System Extension → Success & Failure  
+- System Integrity → Success & Failure
+
+## 4. Enable Command-Line Logging for Event ID 4688
+
+Process creation logs become far more valuable when they include command-line arguments.
+
+1. Navigate to:
+```
+Computer Configuration → Policies → Administrative Templates → System → Audit Process Creation
+```
+2. Enable:
+```
+"Include command line in process creation events"
+```
+
+### 5. Enable PowerShell Script Block Logging (Event ID 4104)
+
+1. Navigate to:
+```
+Administrative Templates → Windows Components → Windows PowerShell
+```
+2. Enable:
+- **Turn on PowerShell Script Block Logging**
+- Log start and stop events
+
+## 6. Enable Subcategory Enforcement (Critical!)
+
+Required for advanced audit policies to function:
+
+1. Navigate to:
+```
+Security Settings → Local Policies → Security Options
+```
+2. Enable:
+```
+Audit: Force audit policy subcategory settings (Windows Vista or later) to override audit policy
+```
+
+## 7. Apply Policies to Endpoints
+
+On the Windows 10 workstation:
+
+```powershell
+gpupdate /force
+```
+
+Verify Event ID **4688** now includes command-line data.
+
+## 8. Install and Configure Sysmon
+
+Sysmon provides detailed endpoint telemetry not available in standard Windows logs.
+
+### Steps:
+
+1. Download **Sysmon** from Microsoft Sysinternals.
+2. Download Sysmon config (Olaf’s recommended `sysmonconfig.xml`).
+3. Extract Sysmon folder and place config inside it.
+4. Open PowerShell as Administrator:
+
+   ```powershell
+   cd C:\Users\<user>\Downloads\Sysmon
+   .\Sysmon64.exe -i sysmonconfig.xml
+   ```
+5. Confirm installation:
+
+   * Check **services.msc** → Sysmon64 is running.
+   * Open Event Viewer →
+
+     ```
+     Applications and Services Logs → Microsoft → Windows → Sysmon
+     ```
