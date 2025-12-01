@@ -269,7 +269,7 @@ MYDFIR\Administrator
 
 Verify:
 
-* **System Properties → Domain: mydfir.local**
+* **System Properties → Domain: MYDFIR.local**
 
 ## **9. Create OUs and Users**
 
