@@ -146,7 +146,7 @@ Update your diagram with:
 * **WAN:** 10.0.0.243/24
 * **LAN:** 192.168.1.0/24
 
-## **8. Updated Lab Network Diagram (Conceptual)**
+## **8. Lab Network Diagram (Conceptual)**
 
 <div>
     <img src="https://i.imgur.com/7YwJhOR.png" />
@@ -156,7 +156,7 @@ Update your diagram with:
 
 # Detection Lab - Part 2
 
-## **Active Directory Domain Controller (AD DC) Deployment**
+## **Active Directory Domain Controller (ADDC) Deployment**
 
 In this phase of the Detection Engineering Lab, we deploy a **Windows Server 2022 Domain Controller**, configure Active Directory, create organizational units, add users, and join a Windows 10 workstation to the domain. This forms the backbone for enterprise identity telemetry used throughout the detection lab.
 
