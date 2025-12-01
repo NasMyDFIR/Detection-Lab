@@ -153,3 +153,215 @@ Update your diagram with:
 </div>
 
 *Ref 1: Network Diagram*
+
+# Detection Lab - Part 2
+
+## **Active Directory Domain Controller (AD DC) Deployment**
+
+In this phase of the Detection Engineering Lab, we deploy a **Windows Server 2022 Domain Controller**, configure Active Directory, create organizational units, add users, and join a Windows 10 workstation to the domain. This forms the backbone for enterprise identity telemetry used throughout the detection lab.
+
+## **Objectives**
+
+* Install **Windows Server 2022 Standard**
+* Promote the server to a **Domain Controller (ADDS)**
+* Create base **Organizational Units (OUs)** and users
+* Configure a **static IP** for the server
+* Join a Windows 10 workstation to the domain
+* Prepare environment for Group Policy & event logging
+
+## **1. Download & Prepare Windows Server 2022**
+
+1. Search: **“Windows Server ISO”**
+2. Download **Windows Server 2022 Standard (Evaluation)**
+   * Requires registration
+3. Save ISO for use in VMware Workstation
+
+## **2. Create the Server VM in VMware Workstation**
+
+### VM Configuration
+
+| Setting    | Value                         |
+| ---------- | ----------------------------- |
+| Name       | `ADDC01`                      |
+| OS         | Windows Server 2022 Standard  |
+| Disk       | 60 GB                         |
+| Memory     | **4 GB** (2 GB caused issues) |
+| Processors | 1                             |
+| Network    | NAT (LAN network)             |
+
+> ❗ If auto-install fails (“Cannot find license terms”), disable VMware’s Autoinstall/Floppy settings and proceed with manual installation.
+
+## **3. Install Windows Server 2022**
+
+1. Boot the VM
+2. Choose:
+   * **Standard Evaluation (Desktop Experience)**
+3. Accept license → Custom Install → Next
+4. After installation, set Administrator password
+5. Log in and dismiss *Server Manager* (will appear automatically)
+
+## **4. Rename the Server**
+
+1. Open **Settings → System → About**
+2. Click **Rename this PC**
+3. Set to:
+
+```
+ADDC01
+```
+
+4. Restart the VM
+
+## **5. Assign a Static IP Address**
+
+Network → Adapter Settings → IPv4 Properties:
+
+| Field         | Value                          |
+| ------------- | ------------------------------ |
+| IP            | `192.168.1.10`                 |
+| Subnet        | `255.255.255.0`                |
+| Gateway       | `192.168.1.1` (PFsense LAN IP) |
+| Preferred DNS | `192.168.1.1`                  |
+| Alternate DNS | `8.8.8.8`                      |
+
+Validate:
+
+```cmd
+ping 192.168.1.1
+```
+
+## **6. Install Active Directory Domain Services**
+
+1. Open **Server Manager**
+2. Select **Manage → Add Roles and Features**
+3. Choose:
+   * **Role-based installation**
+   * Server: `ADDC01`
+4. Install:
+   ```
+   Active Directory Domain Services (ADDS)
+   ```
+5. After installation → click the yellow flag →
+   **“Promote this server to a domain controller”**
+
+## **7. Create New Forest / Domain**
+
+Choose:
+
+```
+Add a new forest
+Domain: MYDFIR.local
+Forest Functional Level: Windows Server 2016
+Domain Functional Level: Windows Server 2016
+```
+
+Set Directory Services Restore Mode (DSRM) password → Next → Install.
+
+The server will restart.
+
+## **8. Verify Domain Controller Installation**
+
+Log in again:
+
+```
+MYDFIR\Administrator
+```
+
+Verify:
+
+* **System Properties → Domain: mydfir.local**
+
+## **9. Create OUs and Users**
+
+Open:
+
+```
+Active Directory Users and Computers
+```
+
+Create Organizational Units:
+
+```
+Finance
+IT
+Sales
+```
+
+Create users:
+
+### Finance → Sally Smith
+
+```
+Username: sally
+Password: (set & uncheck “User must change password at next logon”)
+```
+
+### IT → Steven MyDFIR
+
+```
+Username: steven
+Password: (set)
+```
+
+### Sales → Bob Smith
+
+```
+Username: bob
+Password: (set)
+```
+
+## **10. Join Windows 10 Workstation to the Domain**
+
+> Note: Windows 10 **Pro** edition is required.
+
+### Fix networking first
+
+Windows workstation default IP was not on the LAN subnet.
+
+Set static IP:
+
+| Field         | Value                              |
+| ------------- | ---------------------------------- |
+| IP            | `192.168.1.100`                    |
+| Gateway       | `192.168.1.1`                      |
+| Preferred DNS | `192.168.1.10` (Domain Controller) |
+| Alternate DNS | `192.168.1.1`                      |
+
+Validate:
+
+```cmd
+ping 192.168.1.1
+ping 192.168.1.10
+```
+
+### Join the domain
+
+1. Right-click **This PC → Properties**
+2. **Rename this PC (Advanced)**
+3. Domain:
+
+   ```
+   MYDFIR.local
+   ```
+4. Enter credentials:
+
+```
+User: MYDFIR\Administrator
+```
+
+5. Restart Windows 10
+
+## **11. Test Domain Login**
+
+On Windows 10 → login screen:
+
+Select **Other user**
+
+Log in as:
+
+```
+Username: mydfir\steven
+Password: <password>
+```
+
+If login succeeds → Active Directory is functioning properly.
