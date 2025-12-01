@@ -132,7 +132,7 @@ em1 → LAN interface (matches NAT NIC MAC)
 5. PFsense completes installation
 6. Reboot
 
-## 📡 **7. Confirm Post-Install Interface Assignments**
+## **7. Confirm Post-Install Interface Assignments**
 
 Example output:
 
@@ -148,3 +148,8 @@ Update your diagram with:
 
 ## **8. Updated Lab Network Diagram (Conceptual)**
 
+<div>
+    <img src="https://i.imgur.com/7YwJhOR.png" />
+</div>
+
+*Ref 1: Network Diagram*
