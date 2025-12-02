@@ -509,3 +509,229 @@ Sysmon provides detailed endpoint telemetry not available in standard Windows lo
      ```
      Applications and Services Logs → Microsoft → Windows → Sysmon
      ```
+
+# Part 4 – Splunk Server Configuration & Windows/Domain Controller Log Forwarding
+
+This section covers configuring the Splunk server with a static IP, creating a detection index, installing the Splunk Universal Forwarder on the Windows workstation and Domain Controller, applying the correct `inputs.conf` configuration, and validating end-to-end log ingestion.
+
+## **1. Assign a Static IP to the Splunk Server**
+
+On the Splunk machine, check the current IP:
+```bash
+ip a
+````
+
+If the system is not on the detection lab network, configure a static IP:
+
+```bash
+sudo nano /etc/netplan/00-installer-config.yaml
+```
+
+Update configuration:
+
+```yaml
+dhcp4: false
+addresses:
+  - 192.168.1.20/24
+routes:
+  - to: default
+    via: 192.168.1.1
+nameservers:
+  addresses: [8.8.8.8]
+```
+
+Apply settings:
+
+```bash
+sudo netplan apply
+```
+
+Verify:
+
+```bash
+ip a
+ping 192.168.1.1     # PFsense
+ping 192.168.1.10    # Domain Controller
+```
+
+Update network diagram:
+
+```
+Splunk → 192.168.1.20
+```
+
+## **2. Create the Splunk Index**
+
+On the Splunk Web UI (from Windows 10 browser):
+
+1. Go to **Settings → Indexes**
+2. Click **New Index**
+3. Name it:
+
+   ```
+   mydfir-detect
+   ```
+
+## **3. Install the Splunk Universal Forwarder on Windows 10**
+
+1. Download the Windows Universal Forwarder from Splunk’s website.
+2. Run the installer:
+
+   * Accept license
+   * Set username: `admin`
+   * Deployment server: **none**
+   * Receiving indexer:
+
+     ```
+     192.168.1.20
+     Port: 9997
+     ```
+3. Finish installation.
+
+## **4. Enable Receiving on Splunk (Port 9997)**
+
+On Splunk Web:
+
+1. **Settings → Forwarding and Receiving**
+2. Click **Configure Receiving**
+3. Add port:
+
+   ```
+   9997
+   ```
+
+## **5. Configure `inputs.conf` on the Windows Forwarder**
+
+Download the `inputs.conf` from GitHub:
+
+```
+https://github.com/MyDFIR/Active-Directory-Project
+```
+
+Place the file into:
+
+```
+C:\Program Files\SplunkUniversalForwarder\etc\system\local\
+```
+
+Open the file and update indexes:
+
+```conf
+[WinEventLog://Security]
+index = mydfir-detect
+disabled = false
+
+[WinEventLog://System]
+index = mydfir-detect
+disabled = false
+
+[WinEventLog://Application]
+index = mydfir-detect
+disabled = false
+
+[WinEventLog://Microsoft-Windows-Sysmon/Operational]
+index = mydfir-detect
+disabled = false
+```
+
+**Important:** Save as *all files*, not `.txt`.
+
+## **6. Fix Permissions & Restart the Forwarder Service**
+
+Open **Services** → find:
+
+```
+SplunkForwarder
+```
+
+Set Log On As:
+
+```
+Local System account
+```
+
+Restart the service.
+
+## **7. Verify Log Ingestion**
+
+In Splunk Search:
+
+```kql
+index=mydfir-detect
+```
+
+You should see events from:
+
+* `WinEventLog:Security`
+* `WinEventLog:System`
+* `WinEventLog:Application`
+* `Sysmon`
+
+Hostnames should include your Windows workstation.
+
+## **8. Install the Splunk Universal Forwarder on the Domain Controller**
+
+From the Domain Controller:
+
+1. Access the shared tools folder from Windows 10:
+
+   ```
+   \\<Windows10Host>\tools
+   ```
+2. Copy over:
+
+   * Splunk Universal Forwarder installer
+   * Sysmon
+   * `inputs.conf`
+3. Install Sysmon:
+
+   ```powershell
+   .\Sysmon64.exe -i sysmonconfig.xml
+   ```
+4. Install the Splunk Universal Forwarder:
+
+   * Username: `admin`
+   * Indexer: `192.168.1.20:9997`
+5. Copy the same `inputs.conf` to:
+
+   ```
+   C:\Program Files\SplunkUniversalForwarder\etc\system\local\
+   ```
+6. In **Services**, ensure **SplunkForwarder** runs under:
+
+   ```
+   Local System account
+   ```
+
+   Restart the service.
+
+## **9. Validate Active Directory Log Forwarding**
+
+In Splunk Search:
+
+```kql
+index=mydfir-detect | stats count by host
+```
+
+Expected hosts:
+
+* `Windows10`
+* `ADDC01`
+
+Active Directory logs should appear automatically.
+
+## **10. Status Recap**
+
+At this stage:
+
+| Component         | Status                        |
+| ----------------- | ----------------------------- |
+| PFsense           | ✔ Installed                   |
+| Domain Controller | ✔ Configured & logging        |
+| Windows 10        | ✔ Joined domain & logging     |
+| Sysmon            | ✔ Installed on both endpoints |
+| Splunk Server     | ✔ Static IP & index           |
+| Windows Forwarder | ✔ Installed & sending logs    |
+| AD Forwarder      | ✔ Installed & sending logs    |
+
+The next steps involve configuring **Zeek and Suricata** to complete the network visibility pipeline.
