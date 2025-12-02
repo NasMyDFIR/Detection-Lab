@@ -510,7 +510,7 @@ Sysmon provides detailed endpoint telemetry not available in standard Windows lo
      Applications and Services Logs → Microsoft → Windows → Sysmon
      ```
 
-# Part 4 – Splunk Server Configuration & Windows/Domain Controller Log Forwarding
+# Part 4 - Splunk Server Configuration & Windows/Domain Controller Log Forwarding
 
 This section covers configuring the Splunk server with a static IP, creating a detection index, installing the Splunk Universal Forwarder on the Windows workstation and Domain Controller, applying the correct `inputs.conf` configuration, and validating end-to-end log ingestion.
 
@@ -735,3 +735,247 @@ At this stage:
 | AD Forwarder      | ✔ Installed & sending logs    |
 
 The next steps involve configuring **Zeek and Suricata** to complete the network visibility pipeline.
+
+# Part 5 - Installing Splunk Universal Forwarder on Zeek/Suricata Sensor & Sending Logs to Splunk
+
+This section covers configuring the **Zeek + Suricata sensor** (192.168.1.30) to forward its network visibility logs into the Splunk SIEM. Steps include assigning a static IP, installing the Splunk Universal Forwarder, configuring forwarding, enabling JSON logging in Zeek, configuring Suricata’s logging, and finalizing the Splunk inputs configuration.
+
+## 1. Set Static IP for Zeek/Suricata Sensor
+
+Edit Netplan configuration:
+
+```bash
+sudo nano /etc/netplan/00-installer-config.yaml
+````
+
+Configure:
+
+```yaml
+addresses:
+  - 192.168.1.30/24
+routes:
+  - to: default
+    via: 192.168.1.1
+nameservers:
+  addresses: [8.8.8.8]
+```
+
+Apply settings:
+
+```bash
+sudo netplan apply
+ip a
+```
+
+Verify you can reach Splunk:
+
+```bash
+ping 192.168.1.20
+```
+
+## 2. Download & Install Splunk Universal Forwarder (Debian)
+
+Since copy/paste is disabled, convert the long Splunk download link into a short one using TinyURL:
+
+1. Visit **tinyurl.com**
+2. Paste the Splunk `.deb` download link
+3. Create a shortened URL, e.g.:
+
+```
+https://tinyurl.com/mydfir-detect
+```
+
+Download on the sensor:
+
+```bash
+wget https://tinyurl.com/mydfir-detect
+mv mydfir-detect splunk
+sudo dpkg -i splunk
+```
+
+## 3. Start Splunk Forwarder & Configure Credentials
+
+Navigate to the Splunk Forwarder directory:
+
+```bash
+cd /opt/splunkforwarder/bin
+sudo -u splunkfwd bash
+./splunk start
+```
+
+Accept the license and set:
+
+* **Username:** `admin`
+* **Password:** your choice
+
+Enable Splunk Forwarder at boot:
+
+```bash
+sudo ./splunk enable boot-start
+```
+
+## 4. Configure Forwarding to Splunk Indexer
+
+Add the Splunk server:
+
+```bash
+sudo ./splunk add forward-server 192.168.1.20:9997
+```
+
+Verify:
+
+```bash
+sudo ./splunk list forward-server
+```
+
+You should see:
+
+```
+Active forwards:
+    192.168.1.20:9997
+```
+
+## 5. Configure Inputs to Send Zeek & Suricata Logs to Splunk
+
+Create the inputs config file:
+
+```bash
+sudo nano /opt/splunkforwarder/etc/system/local/inputs.conf
+```
+
+Add Zeek log forwarding:
+
+```ini
+[default]
+host = 192.168.1.30
+
+[monitor:///opt/zeek/logs/current]
+_TCP_ROUTING = *
+disabled = false
+index = mydfir-detect
+sourcetype = bro:json
+whitelist = \.log$
+```
+
+Add Suricata log forwarding:
+
+```ini
+[monitor:///var/log/suricata/eve.json]
+_TCP_ROUTING = *
+disabled = false
+index = mydfir-detect
+sourcetype = suricata
+```
+
+Restart the Splunk Forwarder:
+
+```bash
+sudo /opt/splunkforwarder/bin/splunk restart
+```
+
+## 6. Enable JSON Logging in Zeek
+
+Edit Zeek’s local configuration:
+
+```bash
+sudo nano /opt/zeek/share/zeek/site/local.zeek
+```
+
+Add:
+
+```zeek
+@load policy/tuning/json-logs
+redef ignore_checksums = T;
+```
+
+Redeploy Zeek:
+
+```bash
+sudo /opt/zeek/bin/zeekctl deploy
+```
+
+Verify logs:
+
+```bash
+ls /opt/zeek/logs/current
+```
+
+## 7. Configure Suricata to Log Correct Interface
+
+Edit Suricata’s config:
+
+```bash
+sudo nano /etc/suricata/suricata.yaml
+```
+
+Update interface from `eth0` / `e0` → `ens33`:
+
+```yaml
+interface: ens33
+```
+
+Restart Suricata:
+
+```bash
+sudo systemctl restart suricata
+sudo systemctl status suricata
+```
+
+Confirm logs:
+
+```bash
+ls -lh /var/log/suricata/eve.json
+```
+
+## 8. Enable Promiscuous Mode for Packet Capture
+
+Zeek & Suricata require promiscuous mode to see *all* network traffic:
+
+```bash
+sudo ip link set ens33 promisc on
+```
+
+Verify:
+
+```bash
+ip a
+```
+
+Should show:
+
+```
+BROADCAST MULTICAST PROMISC UP
+```
+
+## 9. Validate Log Ingestion in Splunk
+
+Search in Splunk:
+
+```spl
+index=mydfir-detect sourcetype="bro:json"
+```
+
+```spl
+index=mydfir-detect sourcetype="suricata"
+```
+
+You should now see:
+
+* `conn.log`
+* `dns.log`
+* `http.log`
+* Suricata EVE JSON events
+
+Your Zeek/Suricata sensor is now fully integrated into Splunk SIEM.
+
+## Updated Network Map (After Part 5)
+
+| Component              | IP            | Status                                   |
+| ---------------------- | ------------- | ---------------------------------------- |
+| Zeek + Suricata Sensor | 192.168.1.30  | ✔ Forwarding JSON logs to Splunk         |
+| Splunk SIEM            | 192.168.1.20  | ✔ Receiving logs                         |
+| Active Directory       | 192.168.1.10  | ✔ Forwarding                             |
+| Windows 10             | 192.168.1.100 | ✔ Forwarding                             |
+| PFsense Firewall       | 192.168.1.1   | ❗ Not yet configured (covered in Part 6) |
+
+Your detection lab now has **full network telemetry** and is ready for enrichment, correlation, and detection engineering.
