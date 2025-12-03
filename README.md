@@ -979,3 +979,204 @@ Your Zeek/Suricata sensor is now fully integrated into Splunk SIEM.
 | PFsense Firewall       | 192.168.1.1   | ❗ Not yet configured (covered in Part 6) |
 
 Your detection lab now has **full network telemetry** and is ready for enrichment, correlation, and detection engineering.
+
+# Part 6 - Forwarding PFsense Firewall Logs to Splunk (FreeBSD Forwarder)
+
+This section documents how to configure **PFsense** (FreeBSD-based firewall) to forward its firewall logs into **Splunk** using the **Splunk Universal Forwarder for FreeBSD**. Because Splunk currently supports **FreeBSD 12.x**, PFsense must be installed with a compatible version (PFsense 2.6).
+
+## 1. Initial PFsense Setup
+
+Access PFsense from a browser:
+
+```
+[http://192.168.1.1]
+````
+
+Default credentials:
+
+- **Username:** `admin`
+- **Password:** `pfsense`
+
+Perform the initial setup wizard:
+
+1. Accept defaults for hostname/domain.
+2. **Uncheck “Block private networks (RFC1918)”** on the WAN interface  
+   (PFsense’s WAN is inside the lab’s private network).
+3. Confirm LAN IP: `192.168.1.1`.
+4. Set a new admin password.
+5. Reload PFsense to complete setup.
+
+## 2. Checking FreeBSD Version Compatibility
+
+Splunk Universal Forwarder supports **FreeBSD 12.x**.  
+PFsense 2.7 uses **FreeBSD 14**, which will cause the forwarder to crash.
+
+Verify version:
+
+```bash
+freebsd-version
+````
+
+If it shows **14.x**, reinstall PFsense with version **2.6**, which uses FreeBSD **12.3**.
+
+> ✔ PFsense 2.6 + Splunk Universal Forwarder works correctly
+> ❌ PFsense 2.7 (FreeBSD 14.x) is incompatible with Splunk UF
+
+## 3. (Optional) Install Squid Proxy
+
+> **Note:** Squid installation fails on PFsense 2.7 due to PHP version mismatch.
+> Until Splunk supports FreeBSD 14 or PFsense fixes package compatibility, Squid is left out.
+
+Navigate to:
+
+```
+System → Package Manager → Available Packages
+```
+
+Search “squid”.
+
+If installation is blocked, skip proxy ingestion for now.
+
+## 4. Download Splunk Universal Forwarder (FreeBSD)
+
+Since PFsense uses FreeBSD, download the **FreeBSD** Splunk UF package from Splunk’s website.
+
+Because copy/paste isn’t available in the PFsense terminal, shorten the URL using TinyURL:
+
+1. Copy Splunk FreeBSD download URL
+2. Go to **[https://tinyurl.com]**
+3. Create a short link, e.g.:
+
+```
+https://tinyurl.com/mydfir-detect1
+```
+
+On PFsense shell (option **8**):
+
+```bash
+fetch https://tinyurl.com/mydfir-detect1
+```
+
+Extract:
+
+```bash
+tar xvzf <filename>.tgz
+```
+
+A new directory named `splunkforwarder` will appear.
+
+## 5. Start the Splunk Forwarder
+
+Navigate into Splunk UF binary folder:
+
+```bash
+cd splunkforwarder/bin
+./splunk start
+```
+
+Follow prompts:
+
+* Press **Q** to quit license
+* Type **Y** to accept
+* Set username/password (admin / your password)
+
+## 6. Configure Forwarding to Splunk Indexer
+
+Add Splunk heavy forwarder or indexer:
+
+```bash
+./splunk add forward-server 192.168.1.20:9997
+```
+
+Restart to activate forwarding:
+
+```bash
+./splunk stop
+./splunk start
+```
+
+Verify:
+
+```bash
+./splunk list forward-server
+```
+
+You should see:
+
+```
+Active forwards:
+  192.168.1.20:9997
+```
+
+## 7. Create `inputs.conf` (FreeBSD uses `vi`)
+
+Navigate to:
+
+```bash
+cd /splunkforwarder/etc/system/local
+vi inputs.conf
+```
+
+Press **I** to enter insert mode and add:
+
+```ini
+[default]
+host = 192.168.1.1
+
+[monitor:///var/log/filter.log]
+_TCP_ROUTING = *
+disabled = false
+index = mydfir-detect
+sourcetype = pfsense
+```
+
+Save and exit:
+
+```
+ESC :wq!
+```
+
+Restart Splunk UF:
+
+```bash
+cd /splunkforwarder/bin
+./splunk restart
+```
+
+## 8. Validate Firewall Log Ingestion in Splunk
+
+On Splunk search:
+
+```spl
+index=mydfir-detect sourcetype=pfsense
+```
+
+Logs should now appear.
+
+> Note: PFsense logs may be unparsed until you install the **TA-pfsense Splunk Add-on**, which provides CIM mappings and field extraction.
+
+### Final Lab Topology After Part 6
+
+| Component              | IP            | Log Status                      |
+| ---------------------- | ------------- | ------------------------------- |
+| PFsense Firewall       | 192.168.1.1   | ✔ Forwarding `filter.log`       |
+| Zeek + Suricata Sensor | 192.168.1.30  | ✔ JSON logs                     |
+| Splunk Server          | 192.168.1.20  | ✔ Receiving all logs            |
+| Active Directory DC    | 192.168.1.10  | ✔ WinEvent + Sysmon             |
+| Windows 10 Endpoint    | 192.168.1.100 | ✔ Sysmon + PowerShell           |
+| Kali Linux Attacker    | 192.168.1.200 | Pending (C2 demonstration next) |
+
+### Completed Ingestion Pipeline (After Part 6)
+
+* Firewall telemetry (PFsense)
+* Proxy-ready (Squid pending support)
+* Network telemetry (Zeek + Suricata)
+* Endpoint + Sysmon logs
+* AD + DNS logs
+
+Your Splunk SIEM is now receiving **full perimeter, endpoint, and network telemetry**, preparing the environment for:
+
+* Malware execution & detection
+* C2 traffic analysis
+* Atomic Red Team tests
+* Detection engineering & correlation
