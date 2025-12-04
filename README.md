@@ -1,26 +1,3 @@
-# Detection Lab
-
-## Objective
-[Brief Objective - Remove this afterwards]
-
-The Detection Lab project aimed to establish a controlled environment for simulating and detecting cyber attacks. The primary focus was to ingest and analyze logs within a Security Information and Event Management (SIEM) system, generating test telemetry to mimic real-world attack scenarios. This hands-on experience was designed to deepen understanding of network security, attack patterns, and defensive strategies.
-
-### Skills Learned
-[Bullet Points - Remove this afterwards]
-
-- Advanced understanding of SIEM concepts and practical application.
-- Proficiency in analyzing and interpreting network logs.
-- Ability to generate and recognize attack signatures and patterns.
-- Enhanced knowledge of network protocols and security vulnerabilities.
-- Development of critical thinking and problem-solving skills in cybersecurity.
-
-### Tools Used
-[Bullet Points - Remove this afterwards]
-
-- Security Information and Event Management (SIEM) system for log ingestion and analysis.
-- Network analysis tools (such as Wireshark) for capturing and examining network traffic.
-- Telemetry generation tools to create realistic network traffic and attack scenarios.
-
 # Detection Lab - Part 1
 
 ## **Environment Planning & PFsense Firewall Installation**
@@ -46,14 +23,14 @@ The environment is designed to mimic a small but realistic corporate network for
 
 Using **draw.io**, the following components were outlined:
 
-* ☁ **Internet**
-* 🔥 **PFsense Firewall**
-* 🖥️ **Splunk Server**
-* 🧩 **Active Directory Domain Controller**
-* 📡 **Zeek + Suricata IDS Server**
-* 💻 **Windows 10 Workstation**
-* 🦠 **Kali Linux Attacker**
-* 🔀 **Layer-2 Switch** connecting internal hosts
+* **Internet**
+* **PFsense Firewall**
+* **Splunk Server**
+* **Active Directory Domain Controller**
+* **Zeek + Suricata IDS Server**
+* **Windows 10 Workstation**
+* **Kali Linux Attacker**
+* **Layer-2 Switch** connecting internal hosts
 
 Each host is logically placed behind the firewall, with the attacker VM functioning as an internal “red team” device for demonstration, even though a real attacker would sit outside the LAN.
 
@@ -149,7 +126,7 @@ Update your diagram with:
 ## **8. Lab Network Diagram (Conceptual)**
 
 <div>
-    <img src="https://i.imgur.com/7YwJhOR.png" />
+    <img src="https://i.imgur.com/DQxmrAW.jpg" />
 </div>
 
 *Ref 1: Network Diagram*
@@ -720,6 +697,12 @@ Expected hosts:
 
 Active Directory logs should appear automatically.
 
+<div>
+    <img src="https://i.imgur.com/7GHFKUC.png" />
+</div>
+
+*Ref 2: Ingested Logs*
+
 ## **10. Status Recap**
 
 At this stage:
@@ -932,7 +915,7 @@ ls -lh /var/log/suricata/eve.json
 Zeek & Suricata require promiscuous mode to see *all* network traffic:
 
 ```bash
-sudo ip link set ens33 promisc on
+sudo ip link set ensXX promisc on
 ```
 
 Verify:
@@ -1152,6 +1135,12 @@ index=mydfir-detect sourcetype=pfsense
 ```
 
 Logs should now appear.
+
+<div>
+    <img src="https://i.imgur.com/2ULyk4U.png" />
+</div>
+
+*Ref 3: Ingested Logs by sourcetype*
 
 > Note: PFsense logs may be unparsed until you install the **TA-pfsense Splunk Add-on**, which provides CIM mappings and field extraction.
 
@@ -1386,6 +1375,12 @@ This highlights the breadth of Nmap scanning across the network.
 | Windows 10 Endpoint    | 192.168.1.100 | ✔ Sysmon, GPO logging  |
 | Zeek + Suricata Sensor | 192.168.1.30  | ✔ JSON logs            |
 | Kali Linux             | 192.168.1.250 | ✔ Adversary Simulation |
+
+<div>
+    <img src="https://i.imgur.com/z94ap9a.png" />
+</div>
+
+*Ref 4: Network Hosts*
 
 ## 10. Final Notes
 
